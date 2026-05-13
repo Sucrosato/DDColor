@@ -31,7 +31,7 @@ class LabDataset(data.Dataset):
             meta_info_file = [meta_info_file]
         self.paths = []
         for meta_info in meta_info_file:
-            with open(meta_info, 'r') as fin:
+            with open(meta_info, 'r', encoding='utf-8') as fin:
                 self.paths.extend([line.strip() for line in fin])
 
         self.min_ab, self.max_ab = -128, 128
@@ -39,12 +39,12 @@ class LabDataset(data.Dataset):
         self.ab_palette = [i for i in range(self.min_ab, self.max_ab + self.interval_ab, self.interval_ab)]
         # print(self.ab_palette)
 
-        self.do_fmix = opt['do_fmix']
+        self.do_fmix = opt.get('do_fmix', False)
         self.fmix_params = {'alpha':1.,'decay_power':3.,'shape':(256,256),'max_soft':0.0,'reformulate':False}
-        self.fmix_p = opt['fmix_p']
-        self.do_cutmix = opt['do_cutmix']
+        self.fmix_p = opt.get('fmix_p', 0.5)
+        self.do_cutmix = opt.get('do_cutmix', False)
         self.cutmix_params = {'alpha':1.}
-        self.cutmix_p = opt['cutmix_p']
+        self.cutmix_p = opt.get('cutmix_p', 0.5)
 
 
     def __getitem__(self, index):

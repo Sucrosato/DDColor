@@ -66,7 +66,7 @@ class HardDiskBackend(BaseStorageBackend):
 
     def get_text(self, filepath):
         filepath = str(filepath)
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf-8') as f:
             value_buf = f.read()
         return value_buf
 
