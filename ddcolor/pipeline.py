@@ -29,36 +29,58 @@ def build_ddcolor_model(
 ):
     """Build a DDColor model and load weights.
 
-    This helper is intentionally backend-agnostic: `model_cls` can be
-    `ddcolor.DDColor` or `basicsr.archs.ddcolor_arch.DDColor` as long as
-    it supports the common constructor args used below.
+    Args:
+        model_cls: DDColor model class (arch or standalone).
+        model_path: Path to .pth checkpoint.
+        input_size: Inference input size (single int, used for H and W).
+        model_size: 'tiny' | 'large' | 'dinov3_small' | 'dinov3_base' | 'dinov3_large'.
+        decoder_type: 'MultiScaleColorDecoder' | 'SingleColorDecoder' | 'SDT'.
+        device: torch device.
     """
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if model_size not in ("tiny", "large"):
-        raise ValueError(f"model_size must be 'tiny' or 'large', got: {model_size}")
-    encoder_name = "convnext-t" if model_size == "tiny" else "convnext-l"
+    dinov3_models = {
+        "dinov3_small": "vit_small",
+        "dinov3_base":  "vit_base",
+        "dinov3_large": "vit_large",
+    }
 
-    if decoder_type == "MultiScaleColorDecoder":
-        # keep default consistent with existing scripts
-        kwargs.setdefault("num_queries", 100)
-        kwargs.setdefault("num_scales", 3)
-        kwargs.setdefault("dec_layers", 9)
-    elif decoder_type == "SingleColorDecoder":
-        kwargs.setdefault("num_queries", 256)
+    if model_size in dinov3_models:
+        # DINOv3 ViT + SDT path
+        model = model_cls(
+            model_name=dinov3_models[model_size],
+            input_size=(input_size, input_size),
+            fusion_channels=256,
+            num_output_channels=2,
+            do_normalize=True,
+            **kwargs,
+        )
+    elif model_size in ("tiny", "large"):
+        # Original ConvNeXt path
+        encoder_name = "convnext-t" if model_size == "tiny" else "convnext-l"
+        if decoder_type == "MultiScaleColorDecoder":
+            kwargs.setdefault("num_queries", 100)
+            kwargs.setdefault("num_scales", 3)
+            kwargs.setdefault("dec_layers", 9)
+        elif decoder_type == "SingleColorDecoder":
+            kwargs.setdefault("num_queries", 256)
+        else:
+            raise NotImplementedError(f"decoder_type not implemented: {decoder_type}")
+        model = model_cls(
+            encoder_name=encoder_name,
+            decoder_name=decoder_type,
+            input_size=[input_size, input_size],
+            num_output_channels=2,
+            last_norm="Spectral",
+            do_normalize=False,
+            **kwargs,
+        )
     else:
-        raise NotImplementedError(f"decoder_type not implemented: {decoder_type}")
-
-    model = model_cls(
-        encoder_name=encoder_name,
-        decoder_name=decoder_type,
-        input_size=[input_size, input_size],
-        num_output_channels=2,
-        last_norm="Spectral",
-        do_normalize=False,
-        **kwargs,
-    )
+        raise ValueError(
+            f"model_size must be one of 'tiny', 'large', 'dinov3_small', 'dinov3_base', 'dinov3_large', "
+            f"got: {model_size}"
+        )
 
     state_dict = load_checkpoint_state_dict(model_path, map_location="cpu")
     model.load_state_dict(state_dict, strict=False)

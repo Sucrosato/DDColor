@@ -1,5 +1,10 @@
+# ================================================================
+# DDColor DINOv3 ViT + SDT -- training config
+# Frozen DINOv3 ViT/B encoder + SDT decoder for colorization
+# ================================================================
+
 # general settings
-name: ddcolor_tiny_coco
+name: ddcolor_dinov3_sdt
 model_type: ColorModel
 scale: 1
 num_gpu: 1
@@ -21,7 +26,7 @@ datasets:
     use_hflip: true
     use_rot: false
 
-    # cutmix / fmix (disable for small datasets to avoid noise)
+    # cutmix / fmix (disable for small datasets)
     do_cutmix: false
     do_fmix: false
 
@@ -44,22 +49,19 @@ datasets:
     do_fmix: false
 
 # ================================================================
-# network structures — Tiny model
+# network structures -- DINOv3 ViT + SDT
 # ================================================================
 network_g:
-  type: DDColor
+  type: DDColor_DinoV3_SDT
 
-  encoder_name: convnext-t
-  encoder_from_pretrain: true
-
-  decoder_name: MultiScaleColorDecoder
-  num_queries: 100
-  num_scales: 3
-  dec_layers: 9
-
-  last_norm: Spectral
+  model_name: vit_base
+  input_size: [256, 256]
+  fusion_channels: 256
   num_output_channels: 2
-  do_normalize: false
+  do_normalize: true
+
+  backbone_out_layers: FOUR_EVEN_INTERVALS
+  adapt_to_patch_size: center_padding
 
 network_d:
   type: DynamicUNetDiscriminator
@@ -73,7 +75,7 @@ path:
   resume_state: ~
 
 # ================================================================
-# training settings — adapted for small dataset
+# training settings
 # ================================================================
 train:
   color_enhance: true
@@ -96,7 +98,7 @@ train:
     gamma: 0.5
 
   total_iter: 100000
-  warmup_iter: -1 
+  warmup_iter: -1
 
   # losses
   pixel_opt:
