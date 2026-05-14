@@ -21,6 +21,7 @@ import torch
 from tqdm import tqdm
 
 from ddcolor import DDColor, ColorizationPipeline, build_ddcolor_model
+from basicsr.archs.ddcolor_dinov3_arch import DDColor_DinoV3_SDT
 
 
 def main():
@@ -30,7 +31,8 @@ def main():
     model_group = parser.add_mutually_exclusive_group(required=True)
     model_group.add_argument(
         '--model_path', type=str,
-        help='Path to the local model weights (.pt file)'
+        help='Path to the local model weights (.pt file)',
+        default='checkpoints/net_g_latest.pth'
     )
     model_group.add_argument(
         '--model_name', type=str,
@@ -38,10 +40,10 @@ def main():
     )
     
     # Common arguments
-    parser.add_argument('--input', type=str, default='assets/test_images', help='Input image folder')
-    parser.add_argument('--output', type=str, default='results', help='Output folder')
+    parser.add_argument('--input', type=str, default='assets/imagenet5k', help='Input image folder')
+    parser.add_argument('--output', type=str, default='results/output', help='Output folder')
     parser.add_argument('--input_size', type=int, default=512, help='Input size for the model')
-    parser.add_argument('--model_size', type=str, default='large', choices=['tiny', 'large'],
+    parser.add_argument('--model_size', type=str, default='tiny', choices=['tiny', 'large','dinov3_small', 'dinov3_base', 'dinov3_large'],
                         help='DDColor model size (only used with --model_path)')
     
     args = parser.parse_args()
@@ -55,9 +57,10 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if args.model_path:
-        # Local weights mode
+        # Local weights mode: pick the right model class
+        model_cls = DDColor_DinoV3_SDT if args.model_size.startswith('dinov3_') else DDColor
         model = build_ddcolor_model(
-            DDColor,
+            model_cls,
             model_path=args.model_path,
             input_size=args.input_size,
             model_size=args.model_size,

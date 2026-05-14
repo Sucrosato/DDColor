@@ -1,4 +1,6 @@
 # ignored folders
+.claude/*
+pretrain/*
 datasets/*
 experiments/*
 results/*
