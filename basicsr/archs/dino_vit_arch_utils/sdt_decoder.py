@@ -204,6 +204,97 @@ class DySampleUpsamplerWrapper(nn.Module):
 
 
 # ---------------------------------------------------------------------------
+# ColorQueryBottleneck — learnable color queries + Transformer for global color reasoning
+# ---------------------------------------------------------------------------
+
+class ColorQueryBottleneck(nn.Module):
+    """Injects learnable color queries via Transformer cross-attention.
+
+    Between WeightedFusion and DySample upsampling, a set of learnable color
+    queries attend to the fused spatial features through cross-attention,
+    producing a global color context that is broadcast back to enhance the
+    per-pixel features before upsampling.
+
+    Args:
+        d_model: Feature dimension (default 256).
+        num_queries: Number of learnable color queries (default 100).
+        num_layers: Transformer decoder layers (default 3).
+        nheads: Attention heads (default 8).
+        dim_feedforward: FFN hidden dim (default 1024).
+    """
+
+    def __init__(self, d_model=256, num_queries=100, num_layers=3,
+                 nheads=8, dim_feedforward=1024):
+        super().__init__()
+        from basicsr.archs.ddcolor_arch_utils.transformer_utils import (
+            SelfAttentionLayer, CrossAttentionLayer, FFNLayer, MLP,
+        )
+
+        self.d_model = d_model
+        self.num_queries = num_queries
+
+        # learnable color queries
+        self.query_feat = nn.Embedding(num_queries, d_model)
+        self.query_embed = nn.Embedding(num_queries, d_model)
+
+        # Transformer decoder layers (SA → CA → FFN)
+        self.layers = nn.ModuleList()
+        for _ in range(num_layers):
+            self.layers.append(nn.ModuleList([
+                SelfAttentionLayer(d_model, nheads),
+                CrossAttentionLayer(d_model, nheads),
+                FFNLayer(d_model, dim_feedforward),
+            ]))
+
+        self.decoder_norm = nn.LayerNorm(d_model)
+
+        # Query → color embedding
+        self.color_mlp = MLP(d_model, d_model, d_model, 3)
+
+        # Fuse global color context back into spatial features
+        self.out_proj = nn.Conv2d(d_model * 2, d_model, 1)
+
+    def forward(self, spatial_features):
+        """Forward pass.
+
+        Args:
+            spatial_features: (B, C, H, W) fused features from WeightedFusion.
+
+        Returns:
+            (B, C, H, W) enhanced features with global color context.
+        """
+        B, C, H, W = spatial_features.shape
+
+        # Flatten spatial features as cross-attention memory: (L, B, C) for MHA
+        src = spatial_features.flatten(2).permute(2, 0, 1)  # (N, B, C)
+
+        # Initialize queries: (L, B, C) for MHA
+        query = self.query_feat.weight.unsqueeze(1).repeat(1, B, 1)   # (Q, B, C)
+        pos = self.query_embed.weight.unsqueeze(1).repeat(1, B, 1)
+
+        # Transformer decoder iterations
+        for sa, ca, ffn in self.layers:
+            query = sa(query, query_pos=pos)
+            query = ca(query, src)
+            query = ffn(query)
+
+        query = self.decoder_norm(query)
+
+        # Query → color embedding → global pool → broadcast to spatial
+        query = query.permute(1, 0, 2)                          # (B, Q, C)
+        color_embed = self.color_mlp(query)                     # (B, Q, C)
+        global_color = color_embed.mean(dim=1, keepdim=True)    # (B, 1, C)
+        global_color = global_color.transpose(1, 2).reshape(B, C, 1, 1)
+        global_color = global_color.expand(B, C, H, W)          # (B, C, H, W)
+
+        # Fuse with original features (residual)
+        fused = torch.cat([spatial_features, global_color], dim=1)  # (B, 2C, H, W)
+        out = self.out_proj(fused)                                   # (B, C, H, W)
+
+        return out + spatial_features  # residual connection
+
+
+# ---------------------------------------------------------------------------
 # SDTColorizationHead — SDT decoder adapted for 2-channel ab colorization
 # ---------------------------------------------------------------------------
 
@@ -229,6 +320,9 @@ class SDTColorizationHead(nn.Module):
         n_output_channels: int = 2,
         use_cls_token: bool = True,
         output_size: tuple = (256, 256),
+        use_color_queries: bool = False,
+        num_queries: int = 100,
+        query_layers: int = 3,
         **kwargs
     ):
         super().__init__()
@@ -240,6 +334,14 @@ class SDTColorizationHead(nn.Module):
 
         self.weighted_fusion = WeightedFusion(in_channels, fusion_channels)
         self.detail_enhancer = SpatialDetailEnhancer(fusion_channels)
+
+        # Color Query Bottleneck
+        if use_color_queries:
+            self.color_query_bottleneck = ColorQueryBottleneck(
+                d_model=fusion_channels, num_queries=num_queries,
+                num_layers=query_layers)
+        else:
+            self.color_query_bottleneck = nn.Identity()
 
         self.upsample_1 = DySampleUpsamplerWrapper(
             fusion_channels, scale_factor=4, style='lp', groups=4, dyscope=True)
@@ -287,6 +389,9 @@ class SDTColorizationHead(nn.Module):
         fused_spatial = fused_tokens.permute(0, 2, 1).contiguous().reshape(
             B, self.fusion_channels, H_patches, W_patches)
         enhanced = self.detail_enhancer(fused_spatial)
+
+        # Color Query Bottleneck (skip for nn.Identity)
+        enhanced = self.color_query_bottleneck(enhanced)
 
         # Upsample 16x
         x = self.upsample_1(enhanced)
