@@ -48,6 +48,12 @@ def build_ddcolor_model(
 
     if model_size in dinov3_models:
         # DINOv3 ViT + SDT path
+        # Auto-detect color queries from checkpoint
+        cq_override = kwargs.get('use_color_queries', None)
+        if cq_override is None:
+            sd = load_checkpoint_state_dict(model_path, map_location="cpu")
+            has_cq = any("color_query_bottleneck" in k for k in sd.keys())
+            kwargs['use_color_queries'] = has_cq
         model = model_cls(
             model_name=dinov3_models[model_size],
             input_size=(input_size, input_size),
