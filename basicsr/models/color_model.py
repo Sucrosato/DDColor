@@ -95,6 +95,11 @@ class ColorModel(BaseModel):
         else:
             self.cri_colorfulness = None
 
+        if train_opt.get('delta_cf_opt'):
+            self.cri_delta_cf = build_loss(train_opt['delta_cf_opt']).to(self.device)
+        else:
+            self.cri_delta_cf = None
+
         # set up optimizers and schedulers
         self.setup_optimizers()
         self.setup_schedulers()
@@ -175,6 +180,11 @@ class ColorModel(BaseModel):
             l_g_color = self.cri_colorfulness(self.output_rgb)
             l_g_total += l_g_color
             loss_dict['l_g_color'] = l_g_color
+        # delta CF loss
+        if self.cri_delta_cf:
+            l_delta_cf = self.cri_delta_cf(self.output_rgb, self.gt_rgb)
+            l_g_total += l_delta_cf
+            loss_dict['l_delta_cf'] = l_delta_cf
 
         l_g_total.backward()
         self.optimizer_g.step()

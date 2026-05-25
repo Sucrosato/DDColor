@@ -549,3 +549,42 @@ class ColorfulnessLoss(nn.Module):
             colorfulness = stdRoot + (0.3 * meanRoot)
             colorfulness_loss += (1 - colorfulness)
         return self.loss_weight * colorfulness_loss
+
+
+@LOSS_REGISTRY.register()
+class DeltaCFLoss(nn.Module):
+    """Delta CF loss: penalizes deviation from ground-truth colorfulness.
+
+    Unlike ColorfulnessLoss which unconditionally pushes for higher CF,
+    this loss computes |CF(pred) - CF(gt)|, encouraging the model to
+    match the natural colorfulness level of the ground truth.
+
+    Args:
+        loss_weight (float): Loss weight. Default: 1.0.
+    """
+
+    def __init__(self, loss_weight=1.0):
+        super(DeltaCFLoss, self).__init__()
+        self.loss_weight = loss_weight
+
+    @staticmethod
+    def _compute_cf(rgb):
+        """Compute Hasler & Suesstrunk colorfulness for each image in batch."""
+        (R, G, B) = rgb[:, 0, :, :], rgb[:, 1, :, :], rgb[:, 2, :, :]
+        rg = torch.abs(R - G)
+        yb = torch.abs(0.5 * (R + G) - B)
+        rbMean, rbStd = rg.mean(dim=[1, 2]), rg.std(dim=[1, 2])
+        ybMean, ybStd = yb.mean(dim=[1, 2]), yb.std(dim=[1, 2])
+        stdRoot = torch.sqrt(rbStd ** 2 + ybStd ** 2)
+        meanRoot = torch.sqrt(rbMean ** 2 + ybMean ** 2)
+        return stdRoot + 0.3 * meanRoot
+
+    def forward(self, pred, gt, **kwargs):
+        """
+        Args:
+            pred (Tensor): (N, C, H, W) Predicted RGB.
+            gt   (Tensor): (N, C, H, W) Ground-truth RGB.
+        """
+        cf_pred = self._compute_cf(pred)
+        cf_gt = self._compute_cf(gt)
+        return self.loss_weight * torch.abs(cf_pred - cf_gt).mean()
