@@ -1,4 +1,5 @@
 # ignored folders
+data_list/
 .claude/*
 pretrain/*
 datasets/*

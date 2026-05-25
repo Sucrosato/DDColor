@@ -133,7 +133,7 @@ class ColorModel(BaseModel):
             self.gt_lab = torch.cat([self.lq, self.gt], dim=1)
             self.gt_rgb = tensor_lab2rgb(self.gt_lab)
 
-            if self.opt['train'].get('color_enhance', False):
+            if self.is_train and self.opt['train'].get('color_enhance', False):
                 for i in range(self.gt_rgb.shape[0]):
                     self.gt_rgb[i] = color_enhacne_blend(self.gt_rgb[i], factor=self.opt['train'].get('color_enhance_factor'))
 
