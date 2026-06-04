@@ -1,4 +1,5 @@
 # ignored folders
+backup/
 data_list/
 .claude/*
 pretrain/*

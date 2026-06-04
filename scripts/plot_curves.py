@@ -23,7 +23,8 @@ FIGSIZE_WIDE = (10, 5)
 FIGSIZE_SQUARE = (7, 5.5)
 
 plt.rcParams.update({
-    'font.family': 'SimSun',
+    'font.family': 'serif',
+    'font.serif': ['Times New Roman', 'SimSun'],
     'axes.unicode_minus': False,
     'font.size': 13,
     'axes.labelsize': 15,
