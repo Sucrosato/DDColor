@@ -54,7 +54,7 @@ datasets:
 network_g:
   type: DDColor_DinoV3_SDT
 
-  model_name: vit_large
+  model_name: vit_small
   input_size: [256, 256]
   fusion_channels: 256
   num_output_channels: 2
@@ -94,10 +94,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [2000, 4000, 6000, 8000]
+    milestones: [20000, 40000, 60000, 80000]
     gamma: 0.5
 
-  total_iter: 10000
+  total_iter: 100000
   warmup_iter: -1
 
   # losses
@@ -127,7 +127,7 @@ train:
     loss_weight: 1.0
   colorfulness_opt:
     type: ColorfulnessLoss
-    loss_weight: 0.5
+    loss_weight: 0.3
 
 # validation settings
 val:
