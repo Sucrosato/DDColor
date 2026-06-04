@@ -48,12 +48,21 @@ def build_ddcolor_model(
 
     if model_size in dinov3_models:
         # DINOv3 ViT + SDT path
-        # Auto-detect color queries from checkpoint
+        # Auto-detect checkpoint config from state_dict keys
+        sd = load_checkpoint_state_dict(model_path, map_location="cpu")
+
+        # Auto-detect color queries
         cq_override = kwargs.get('use_color_queries', None)
         if cq_override is None:
-            sd = load_checkpoint_state_dict(model_path, map_location="cpu")
             has_cq = any("color_query_bottleneck" in k for k in sd.keys())
             kwargs['use_color_queries'] = has_cq
+
+        # Auto-detect upsample mode
+        um_override = kwargs.get('upsample_mode', None)
+        if um_override is None:
+            has_2x4 = any(f'upsample_{i}' in k for i in (3, 4) for k in sd.keys())
+            kwargs['upsample_mode'] = '2x4' if has_2x4 else '4x2'
+
         model = model_cls(
             model_name=dinov3_models[model_size],
             input_size=(input_size, input_size),

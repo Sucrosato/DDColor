@@ -323,14 +323,17 @@ class SDTColorizationHead(nn.Module):
         use_color_queries: bool = False,
         num_queries: int = 100,
         query_layers: int = 3,
+        upsample_mode: str = '4x2',  # '4x2' (2 stages of 4x) or '2x4' (4 stages of 2x)
         **kwargs
     ):
         super().__init__()
         assert len(in_channels) == 4, f"Expected 4 ViT layer channels, got {len(in_channels)}"
+        assert upsample_mode in ('4x2', '2x4'), f"upsample_mode must be '4x2' or '2x4'"
 
         self.use_cls_token = use_cls_token
         self.fusion_channels = fusion_channels
         self.output_size = output_size
+        self.upsample_mode = upsample_mode
 
         self.weighted_fusion = WeightedFusion(in_channels, fusion_channels)
         self.detail_enhancer = SpatialDetailEnhancer(fusion_channels)
@@ -343,19 +346,35 @@ class SDTColorizationHead(nn.Module):
         else:
             self.color_query_bottleneck = nn.Identity()
 
-        self.upsample_1 = DySampleUpsamplerWrapper(
-            fusion_channels, scale_factor=4, style='lp', groups=4, dyscope=True)
-        self.refinement_1 = nn.Sequential(
-            nn.Conv2d(fusion_channels, fusion_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(fusion_channels),
-            nn.ReLU(inplace=True))
+        if upsample_mode == '4x2':
+            # 2 stages of 4x DySample (original)
+            self.upsample_1 = DySampleUpsamplerWrapper(
+                fusion_channels, scale_factor=4, style='lp', groups=4, dyscope=True)
+            self.refinement_1 = nn.Sequential(
+                nn.Conv2d(fusion_channels, fusion_channels, kernel_size=3, padding=1),
+                nn.BatchNorm2d(fusion_channels),
+                nn.ReLU(inplace=True))
+            self.upsample_2 = DySampleUpsamplerWrapper(
+                fusion_channels, scale_factor=4, style='lp', groups=4, dyscope=True)
+            self.refinement_2 = nn.Sequential(
+                nn.Conv2d(fusion_channels, fusion_channels, kernel_size=3, padding=1),
+                nn.BatchNorm2d(fusion_channels),
+                nn.ReLU(inplace=True))
 
-        self.upsample_2 = DySampleUpsamplerWrapper(
-            fusion_channels, scale_factor=4, style='lp', groups=4, dyscope=True)
-        self.refinement_2 = nn.Sequential(
-            nn.Conv2d(fusion_channels, fusion_channels, kernel_size=3, padding=1),
-            nn.BatchNorm2d(fusion_channels),
-            nn.ReLU(inplace=True))
+            self.num_upsample_stages = 2
+        else:  # '2x4'
+            # 4 stages of 2x DySample
+            self.num_upsample_stages = 4
+            for stage in range(1, 5):
+                setattr(self, f'upsample_{stage}', nn.Sequential(
+                    DySample(fusion_channels, scale=2, style='lp', groups=4, dyscope=True),
+                    nn.Conv2d(fusion_channels, fusion_channels, kernel_size=3, padding=1, bias=False),
+                    nn.BatchNorm2d(fusion_channels),
+                    nn.ReLU(inplace=True)))
+                setattr(self, f'refinement_{stage}', nn.Sequential(
+                    nn.Conv2d(fusion_channels, fusion_channels, kernel_size=3, padding=1),
+                    nn.BatchNorm2d(fusion_channels),
+                    nn.ReLU(inplace=True)))
 
         self.output_conv = nn.Sequential(
             nn.Conv2d(fusion_channels, fusion_channels // 2, kernel_size=3, padding=1),
@@ -394,10 +413,10 @@ class SDTColorizationHead(nn.Module):
         enhanced = self.color_query_bottleneck(enhanced)
 
         # Upsample 16x
-        x = self.upsample_1(enhanced)
-        x = self.refinement_1(x)
-        x = self.upsample_2(x)
-        x = self.refinement_2(x)
+        x = enhanced
+        for stage in range(1, self.num_upsample_stages + 1):
+            x = getattr(self, f'upsample_{stage}')(x)
+            x = getattr(self, f'refinement_{stage}')(x)
 
         out = self.output_conv(x)
 
