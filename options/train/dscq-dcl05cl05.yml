@@ -1,10 +1,10 @@
 # ================================================================
 # DDColor DINOv3 ViT + SDT -- training config
-# Frozen DINOv3 ViT/B encoder + SDT decoder for colorization
+# Frozen DINOv3 ViT/S encoder + SDT decoder for colorization
 # ================================================================
 
 # general settings
-name: ddcolor_dinov3_sdt
+name: dscq-s-dcl
 model_type: ColorModel
 scale: 1
 num_gpu: 1
@@ -13,7 +13,7 @@ manual_seed: 0
 # dataset and data loader settings
 datasets:
   train:
-    name: COCO
+    name: COCOtrain10k
     type: LabDataset
     dataroot_gt: /public/home/lyzhao/dychen/data/train_small/
     meta_info_file: ['data_list/coco_train_10k.txt']
@@ -38,10 +38,10 @@ datasets:
     prefetch_mode: ~
 
   val:
-    name: imagenet-val5k
+    name: coco-val
     type: LabDataset
-    dataroot_gt: /public/home/lyzhao/dychen/data/imagenet5k/
-    meta_info_file: 'data_list/imagenet5k.txt'
+    dataroot_gt: "/public/home/lyzhao/dychen/data/val2017/"
+    meta_info_file: 'data_list/coco_val5k.txt'
     gt_size: 256
     io_backend:
       type: disk
@@ -54,7 +54,7 @@ datasets:
 network_g:
   type: DDColor_DinoV3_SDT
 
-  model_name: vit_large
+  model_name: vit_small
   input_size: [256, 256]
   fusion_channels: 256
   num_output_channels: 2
@@ -62,6 +62,11 @@ network_g:
 
   backbone_out_layers: FOUR_EVEN_INTERVALS
   adapt_to_patch_size: center_padding
+
+  # Color Query Bottleneck
+  use_color_queries: true
+  num_queries: 100
+  query_layers: 3
 
 network_d:
   type: DynamicUNetDiscriminator
@@ -94,10 +99,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [2000, 4000, 6000, 8000]
+    milestones: [20000, 40000, 60000, 80000]
     gamma: 0.5
 
-  total_iter: 10000
+  total_iter: 140000
   warmup_iter: -1
 
   # losses
@@ -128,6 +133,9 @@ train:
   colorfulness_opt:
     type: ColorfulnessLoss
     loss_weight: 0.5
+  delta_cf_opt:
+    type: DeltaCFLoss
+    loss_weight: 0.5
 
 # validation settings
 val:
@@ -137,8 +145,8 @@ val:
 
   metrics:
     fid:                    
-      type: ~          
-      better: lower     
+      type: ~  
+      better: lower
     cf:
       type: calculate_cf
       better: higher
@@ -152,7 +160,7 @@ logger:
   print_freq: 50
   save_snapshot_freq: !!float 2000
   save_snapshot_verbose: true
-  save_checkpoint_freq: !!float 5000
+  save_checkpoint_freq: !!float 2000
   use_tb_logger: true
   wandb:
     project: ~

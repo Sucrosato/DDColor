@@ -4,7 +4,7 @@
 # ================================================================
 
 # general settings
-name: ddcolor_dinov3_sdt
+name: ds-s-ADE20Ktest
 model_type: ColorModel
 scale: 1
 num_gpu: 1
@@ -38,10 +38,10 @@ datasets:
     prefetch_mode: ~
 
   val:
-    name: imagenet-val5k
+    name: ADE20k
     type: LabDataset
-    dataroot_gt: /public/home/lyzhao/dychen/data/imagenet5k/
-    meta_info_file: 'data_list/imagenet5k.txt'
+    dataroot_gt: /public/home/lyzhao/dychen/data/ADE20Kval
+    meta_info_file: 'data_list/ADE20Kval.txt'
     gt_size: 256
     io_backend:
       type: disk
@@ -54,7 +54,7 @@ datasets:
 network_g:
   type: DDColor_DinoV3_SDT
 
-  model_name: vit_large
+  model_name: vit_small
   input_size: [256, 256]
   fusion_channels: 256
   num_output_channels: 2
@@ -70,7 +70,7 @@ network_d:
 
 # path
 path:
-  pretrain_network_g: ~
+  pretrain_network_g: "/public/home/lyzhao/dychen/repos/DDColor/checkpoints/ds-s-85000.pth"
   strict_load_g: true
   resume_state: ~
 
@@ -78,7 +78,7 @@ path:
 # training settings
 # ================================================================
 train:
-  color_enhance: true
+  color_enhance: false
   color_enhance_factor: 1.2
 
   optim_g:
@@ -94,10 +94,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [2000, 4000, 6000, 8000]
+    milestones: [20000, 40000, 60000, 80000]
     gamma: 0.5
 
-  total_iter: 10000
+  total_iter: 0
   warmup_iter: -1
 
   # losses

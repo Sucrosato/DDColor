@@ -52,16 +52,19 @@ datasets:
 # network structures -- DINOv3 ViT + SDT
 # ================================================================
 network_g:
-  type: DDColor_DinoV3_SDT
+  type: DDColor
 
-  model_name: vit_large
-  input_size: [256, 256]
-  fusion_channels: 256
+  encoder_name: convnext-t
+  encoder_from_pretrain: true
+
+  decoder_name: MultiScaleColorDecoder
+  num_queries: 100
+  num_scales: 3
+  dec_layers: 9
+
+  last_norm: Spectral
   num_output_channels: 2
-  do_normalize: true
-
-  backbone_out_layers: FOUR_EVEN_INTERVALS
-  adapt_to_patch_size: center_padding
+  do_normalize: false
 
 network_d:
   type: DynamicUNetDiscriminator
@@ -94,10 +97,10 @@ train:
 
   scheduler:
     type: MultiStepLR
-    milestones: [2000, 4000, 6000, 8000]
+    milestones: [20000, 40000, 60000, 80000]
     gamma: 0.5
 
-  total_iter: 10000
+  total_iter: 100000
   warmup_iter: -1
 
   # losses
