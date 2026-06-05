@@ -43,7 +43,7 @@ def main():
     parser.add_argument('--input', type=str, default='assets/imagenet5k', help='Input image folder')
     parser.add_argument('--output', type=str, default='results/output', help='Output folder')
     parser.add_argument('--input_size', type=int, default=512, help='Input size for the model')
-    parser.add_argument('--model_size', type=str, default='tiny', choices=['tiny', 'large','dinov3_small', 'dinov3_base', 'dinov3_large'],
+    parser.add_argument('--model_size', type=str, default='dinov3_small', choices=['tiny', 'large','dinov3_small', 'dinov3_base', 'dinov3_large'],
                         help='DDColor model size (only used with --model_path)')
     
     args = parser.parse_args()
